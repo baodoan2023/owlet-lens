@@ -142,6 +142,19 @@ describe('loadConfig with an openrouter block', () => {
     );
   });
 
+  for (const bad of ['1234', '""', '{ host: x }']) {
+    it(`rejects review.apiBaseUrl: ${bad} with a ConfigError before the adapter sees it`, () => {
+      fs.writeFileSync(
+        path.join(tmp, 'ai-review.config.yaml'),
+        `review:\n  provider: openrouter\n  model: a/b\n  apiBaseUrl: ${bad}\n`,
+      );
+      assert.throws(
+        () => loadConfig({ cwd: tmp, env: { OPENROUTER_API_KEY: 'k', ANTHROPIC_API_KEY: 'k' }, cliFlags: {} }),
+        (e) => e instanceof ConfigError && /review\.apiBaseUrl/.test(e.message),
+      );
+    });
+  }
+
   it('requires OPENROUTER_API_KEY when openrouter is active', () => {
     fs.writeFileSync(path.join(tmp, 'ai-review.config.yaml'), 'review:\n  provider: openrouter\n  model: a/b\n');
     assert.throws(

@@ -145,6 +145,13 @@ test('openrouter: max_tokens is capped at 64000 or the per-model maxOutputTokens
   assert.equal(seen.body.max_tokens, 8000);
 });
 
+test('openrouter: a per-model maxOutputTokens above the 64k default is honored', async (t) => {
+  const { seen } = captureFetch(t);
+  const routing = validateOpenRouterConfig({ models: { 'z-ai/glm-5.3-flash': { maxOutputTokens: 128_000 } } });
+  await make({ routing }).call('sys', 'usr', { maxTokens: 200_000 });
+  assert.equal(seen.body.max_tokens, 128_000);
+});
+
 test('openrouter: reasoning deltas are ignored, only content is kept', async (t) => {
   captureFetch(t, () => sseResponse([
     `data: ${JSON.stringify({ choices: [{ delta: { reasoning: 'thinking...' } }] })}\n\n`,
