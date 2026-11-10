@@ -35,6 +35,7 @@
 | 0016 | Gate | [The strict gate counts open blocking threads from earlier runs](./adr/0016-strict-gate-counts-open-blocking-threads.md) |
 | 0017 | Review | [`review.severityThreshold` drops findings below it, not just the strict gate](./adr/0017-severity-threshold-filters-findings.md) |
 | 0018 | Naming | [The project is named Owlet Lens; identifiers stored in other people's data keep `ai-review`](./adr/0018-project-name-and-wire-format-identifiers.md) |
+| 0020 | LLM | [OpenRouter routes privately by default and pins providers per model](./adr/0020-openrouter-privacy-default-routing.md) |
 
 ## History (not current documentation)
 - [`specs/`](./specs/): design specs for v1.5/v1.6 features. Kept for background; the code and ADRs are authoritative.

@@ -30,12 +30,14 @@ async function main() {
   const deepseekKey = core.getInput('deepseek-api-key') || '';
   const geminiKey = core.getInput('gemini-api-key') || '';
   const modelstackKey = core.getInput('modelstack-api-key') || '';
+  const openrouterKey = core.getInput('openrouter-api-key') || '';
   const githubToken = core.getInput('github-token') || process.env.GITHUB_TOKEN || '';
   const resolveToken = core.getInput('resolve-token') || '';
   if (anthropicKey) { core.setSecret(anthropicKey); process.env.ANTHROPIC_API_KEY = anthropicKey; }
   if (deepseekKey)  { core.setSecret(deepseekKey);  process.env.DEEPSEEK_API_KEY  = deepseekKey;  }
   if (geminiKey)    { core.setSecret(geminiKey);    process.env.GEMINI_API_KEY    = geminiKey;    }
   if (modelstackKey) { core.setSecret(modelstackKey); process.env.MODELSTACK_API_KEY = modelstackKey; }
+  if (openrouterKey) { core.setSecret(openrouterKey); process.env.OPENROUTER_API_KEY = openrouterKey; }
   if (resolveToken) { core.setSecret(resolveToken); process.env.AI_REVIEW_RESOLVE_TOKEN = resolveToken; }
   if (githubToken) core.setSecret(githubToken);
   process.env.GITHUB_TOKEN = githubToken;

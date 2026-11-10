@@ -5,6 +5,7 @@ const { Minimatch } = require('minimatch');
 const { ConfigError } = require('./errors.js');
 const { deepMerge } = require('./config-merge.js');
 const { assertHostAllowed, BUILTIN_LLM_HOSTS } = require('./endpoint-guard.js');
+const { validateOpenRouterConfig, warnUnusedOpenRouterModels } = require('./openrouter-config.js');
 
 /**
  * Validate and normalize a merged config, then resolve credentials from config or env.
@@ -35,12 +36,14 @@ function validateConfig({ merged, env, unresolvedByPath, onWarn }) {
     deepseek:   'auth.deepseekKey',
     modelstack: 'auth.modelstackKey',
     openai:     'auth.openaiKey',
+    openrouter: 'auth.openrouterKey',
   };
+  const EXPECTED_PROVIDERS = Object.keys(PROVIDER_AUTH_FIELD).join('|');
   for (const kind of ['review', 'reply']) {
     const p = merged[kind].provider;
     if (!PROVIDER_AUTH_FIELD[p]) {
       throw new ConfigError(
-        `Unknown ${kind}.provider: ${JSON.stringify(p)} (expected: anthropic|gemini|deepseek|modelstack|openai)`,
+        `Unknown ${kind}.provider: ${JSON.stringify(p)} (expected: ${EXPECTED_PROVIDERS})`,
       );
     }
   }
@@ -106,6 +109,7 @@ function validateConfig({ merged, env, unresolvedByPath, onWarn }) {
   const deepseekKey    = merged.auth.deepseekKey    ?? env.DEEPSEEK_API_KEY    ?? null;
   const modelstackKey  = merged.auth.modelstackKey  ?? env.MODELSTACK_API_KEY  ?? null;
   const openaiKey      = merged.auth.openaiKey      ?? env.OPENAI_API_KEY      ?? null;
+  const openrouterKey  = merged.auth.openrouterKey  ?? env.OPENROUTER_API_KEY  ?? null;
   // Review-provider credentials and CI env are resolved by each provider's
   // constructor, not here (ADR-0012).
 
@@ -115,6 +119,7 @@ function validateConfig({ merged, env, unresolvedByPath, onWarn }) {
     deepseek:   { key: deepseekKey,   envName: 'DEEPSEEK_API_KEY',   authField: 'auth.deepseekKey' },
     modelstack: { key: modelstackKey, envName: 'MODELSTACK_API_KEY', authField: 'auth.modelstackKey' },
     openai:     { key: openaiKey,     envName: 'OPENAI_API_KEY',     authField: 'auth.openaiKey' },
+    openrouter: { key: openrouterKey, envName: 'OPENROUTER_API_KEY', authField: 'auth.openrouterKey' },
   };
 
   for (const kind of ['review', 'reply']) {
@@ -122,7 +127,7 @@ function validateConfig({ merged, env, unresolvedByPath, onWarn }) {
     const entry = KEY_BY_PROVIDER[providerName];
     if (!entry) {
       throw new ConfigError(
-        `Unknown ${kind}.provider: ${providerName} (expected: anthropic|gemini|deepseek|modelstack|openai)`,
+        `Unknown ${kind}.provider: ${providerName} (expected: ${EXPECTED_PROVIDERS})`,
       );
     }
     // openai allows empty string key for local models (Ollama, LM Studio)
@@ -132,6 +137,10 @@ function validateConfig({ merged, env, unresolvedByPath, onWarn }) {
       );
     }
   }
+
+  // Shape-checked on every run, even when openrouter is inactive (ADR-0020).
+  merged.openrouter = validateOpenRouterConfig(merged.openrouter);
+  warnUnusedOpenRouterModels(merged, onWarn);
 
   const validThresholds = new Set(['low', 'medium', 'high', 'critical']);
   const normalizedThreshold = String(merged.review.severityThreshold ?? '').trim().toLowerCase();
@@ -410,7 +419,7 @@ function validateConfig({ merged, env, unresolvedByPath, onWarn }) {
   }
   merged.review._codingStandards = normalized;
 
-  return deepMerge(merged, { auth: { anthropicKey, geminiKey, deepseekKey, modelstackKey, openaiKey } });
+  return deepMerge(merged, { auth: { anthropicKey, geminiKey, deepseekKey, modelstackKey, openaiKey, openrouterKey } });
 }
 
 module.exports = { validateConfig };

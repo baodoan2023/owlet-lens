@@ -92,6 +92,7 @@ Review và reply mỗi bên chọn một nhà cung cấp, nên bạn có thể d
 | Gemini | `gemini-api-key` | Đặt `review-provider: gemini` |
 | DeepSeek | `deepseek-api-key` | Đặt `review-provider: deepseek` |
 | ModelStack (cổng tương thích OpenAI) | `modelstack-api-key` | Không có bảng giá sẵn: chi phí hiển thị `$0` trừ khi bạn thêm khối `pricing:` |
+| OpenRouter (nhiều mô hình, một key) | `openrouter-api-key` | Mặc định định tuyến riêng tư (`data_collection: deny`); định tuyến theo từng mô hình trong khối cấu hình `openrouter:`. Chi phí lấy từ số tiền OpenRouter tính |
 | Bất kỳ endpoint tương thích OpenAI nào, kể cả mô hình cục bộ | khóa cấu hình `review.apiBaseUrl` | Với mô hình cục bộ, key có thể để trống |
 
 Để dùng nhà cung cấp khác mặc định, thay `anthropic-api-key` ở **cả hai** job và ghi rõ tên model:

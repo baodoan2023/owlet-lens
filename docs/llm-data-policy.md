@@ -49,6 +49,13 @@ The learn pipeline (run on schedule or manually) harvests wontfix thread items f
 - **Compliance**: Assess both ModelStack and the upstream model's policies.
 - **Docs**: https://modelstack.cc
 
+### OpenRouter (proxy)
+
+- **Training**: OpenRouter routes each request to one of several upstream providers. This tool sends `provider.data_collection: "deny"` by default, so only providers that do not store or train on prompts are eligible ([ADR-0020](./adr/0020-openrouter-privacy-default-routing.md)).
+- **Retention**: Set `openrouter.zdr: true` (globally or per model) to require zero-data-retention endpoints. It shrinks the provider pool.
+- **Compliance**: Pin providers per model with `openrouter.models["<id>"].only` and `allowFallbacks: false` when a specific upstream policy is required.
+- **Docs**: https://openrouter.ai/docs/features/privacy-and-logging
+
 ## Recommendations
 
 1. For sensitive/regulated codebases, use **Anthropic** (clearest no-training guarantee on paid API). For the strongest guarantee, Anthropic offers zero-data-retention (ZDR) agreements for eligible enterprise customers — no inputs are retained even for safety monitoring.

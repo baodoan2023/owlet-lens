@@ -92,6 +92,7 @@ Review and reply each pick a provider, so you can use a stronger model for revie
 | Gemini | `gemini-api-key` | Set `review-provider: gemini` |
 | DeepSeek | `deepseek-api-key` | Set `review-provider: deepseek` |
 | ModelStack (OpenAI-compatible gateway) | `modelstack-api-key` | No built-in price table: cost shows as `$0` unless you add a `pricing:` block |
+| OpenRouter (many models, one key) | `openrouter-api-key` | Private routing by default (`data_collection: deny`); per-model routing in the `openrouter:` config block. Cost comes from OpenRouter's billed amount |
 | Any OpenAI-compatible endpoint, including local models | config `review.apiBaseUrl` | The key may be empty for local models |
 
 To use a non-default provider, replace `anthropic-api-key` in **both** jobs and name the models:

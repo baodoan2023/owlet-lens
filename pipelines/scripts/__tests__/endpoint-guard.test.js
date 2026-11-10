@@ -65,6 +65,11 @@ describe('URLs that receive data need an approved host', () => {
     assert.equal(cfg.review.apiBaseUrl, 'https://api.anthropic.com/v1/messages');
   });
 
+  it('accepts the OpenRouter host for the openrouter provider without any list', () => {
+    const cfg = load('review:\n  provider: openrouter\n  model: anthropic/claude-sonnet-4.5\n  apiBaseUrl: https://openrouter.ai/api/v1\n', { OPENROUTER_API_KEY: 'k' });
+    assert.equal(cfg.review.apiBaseUrl, 'https://openrouter.ai/api/v1');
+  });
+
   it('refuses another apiBaseUrl host, for review and for reply', () => {
     for (const kind of ['review', 'reply']) {
       assert.throws(

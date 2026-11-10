@@ -31,6 +31,7 @@ const BUILTIN_LLM_HOSTS = Object.freeze([
   'generativelanguage.googleapis.com',
   'api.modelstack.cc',
   'api.openai.com',
+  'openrouter.ai',
 ]);
 
 /** @param {string} name */

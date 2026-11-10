@@ -17,6 +17,9 @@ inputs:
   modelstack-api-key:
     description: 'ModelStack API key (required if modelstack provider active for review or reply)'
     required: false
+  openrouter-api-key:
+    description: 'OpenRouter API key (required if openrouter provider active for review or reply)'
+    required: false
   github-token:
     description: 'GitHub token'
     required: false
@@ -59,10 +62,10 @@ inputs:
     description: 'Override reply model. Also sets the review-path reflection model (review runs without this input fall back to config reply.model).'
     required: false
   review-provider:
-    description: 'Override review LLM provider (anthropic | gemini | deepseek | modelstack). Sets AI_REVIEW_LLM_PROVIDER; empty keeps config review.provider.'
+    description: 'Override review LLM provider (anthropic | gemini | deepseek | modelstack | openai | openrouter). Sets AI_REVIEW_LLM_PROVIDER; empty keeps config review.provider.'
     required: false
   reply-provider:
-    description: 'Override reply LLM provider (anthropic | gemini | deepseek | modelstack). Sets AI_REPLY_LLM_PROVIDER; empty keeps config reply.provider. Also the review-path reflection provider.'
+    description: 'Override reply LLM provider (anthropic | gemini | deepseek | modelstack | openai | openrouter). Sets AI_REPLY_LLM_PROVIDER; empty keeps config reply.provider. Also the review-path reflection provider.'
     required: false
   strict:
     description: 'Exit non-zero (code 8) when blocking-severity findings posted. Threshold is severity-threshold.'

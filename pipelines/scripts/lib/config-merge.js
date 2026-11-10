@@ -9,7 +9,7 @@ const { isSecretVarName, isAuthPath } = require('./endpoint-guard.js');
 
 const DEFAULTS = Object.freeze({
   provider: 'auto',
-  auth: { token: null, anthropicKey: null, geminiKey: null, deepseekKey: null, modelstackKey: null, openaiKey: null, bitbucketToken: null, gitlabToken: null, azureToken: null },
+  auth: { token: null, anthropicKey: null, geminiKey: null, deepseekKey: null, modelstackKey: null, openaiKey: null, openrouterKey: null, bitbucketToken: null, gitlabToken: null, azureToken: null },
   paths: {
     include: ['backend/**', 'frontend/**'],
     exclude: ['**/*.test.ts', '**/dist/**'],
@@ -60,6 +60,9 @@ const DEFAULTS = Object.freeze({
   },
   markers: { prefix: 'ai-review' },
   pricing: {},
+  // Routing for the openrouter LLM provider; shape and defaults live in
+  // openrouter-config.js (ADR-0020).
+  openrouter: { models: {} },
 });
 
 const KNOWN_KEYS = new Set([
@@ -70,6 +73,7 @@ const KNOWN_KEYS = new Set([
   'reply',
   'markers',
   'pricing',
+  'openrouter',
   'gitlab',
   'azure',
 ]);

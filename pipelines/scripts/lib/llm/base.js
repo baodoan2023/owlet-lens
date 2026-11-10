@@ -151,9 +151,11 @@ class BaseLLMProvider {
    * Shared by the non-streaming (`call`) and streaming (OpenAICompatibleProvider)
    * paths so status handling never diverges.
    * @param {Response} res
+   * @param {{ model?: string }} [_ctx]  the call being made, for subclass hints
    * @returns {Promise<void>}
    */
-  async mapHttpError(res) {
+  // eslint-disable-next-line no-unused-vars
+  async mapHttpError(res, _ctx) {
     if (res.status === 401 || res.status === 403) {
       // Include the (secret-redacted) response body — providers like ModelStack
       // return a useful reason here (invalid_api_key vs IP/tier forbidden) that

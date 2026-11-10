@@ -7,10 +7,11 @@ const { AnthropicProvider } = require('./anthropic.js');
 const { GeminiProvider } = require('./gemini.js');
 const { DeepSeekProvider } = require('./deepseek.js');
 const { ModelStackProvider } = require('./modelstack.js');
+const { OpenRouterProvider } = require('./openrouter.js');
 const { OpenAICompatibleProvider } = require('./openai-base.js');
 const { wrapModelFallback } = require('./model-fallback.js');
 
-const KNOWN_LLM_PROVIDERS = Object.freeze(['anthropic', 'gemini', 'deepseek', 'modelstack', 'openai']);
+const KNOWN_LLM_PROVIDERS = Object.freeze(['anthropic', 'gemini', 'deepseek', 'modelstack', 'openai', 'openrouter']);
 
 function assertKnown(name, source) {
   if (!KNOWN_LLM_PROVIDERS.includes(name)) {
@@ -26,7 +27,7 @@ function assertKnown(name, source) {
  * Resolve LLM provider name. Precedence: env > config > default ('anthropic').
  *
  * @param {{ env: NodeJS.ProcessEnv, configValue?: string, kind: 'review' | 'reply' }} opts
- * @returns {'anthropic' | 'gemini' | 'deepseek' | 'modelstack'}
+ * @returns {'anthropic' | 'gemini' | 'deepseek' | 'modelstack' | 'openai' | 'openrouter'}
  */
 function detectLLMProvider({ env, configValue, kind }) {
   const envKey = kind === 'review' ? 'AI_REVIEW_LLM_PROVIDER' : 'AI_REPLY_LLM_PROVIDER';
@@ -41,13 +42,14 @@ function detectLLMProvider({ env, configValue, kind }) {
 /**
  * Build an LLMProvider instance for the requested provider name + path.
  *
- * @param {'anthropic' | 'gemini' | 'deepseek' | 'modelstack'} name
+ * @param {'anthropic' | 'gemini' | 'deepseek' | 'modelstack' | 'openai' | 'openrouter'} name
  * @param {{
  *   config: {
- *     auth: { anthropicKey?: string|null, geminiKey?: string|null, deepseekKey?: string|null, modelstackKey?: string|null },
+ *     auth: { anthropicKey?: string|null, geminiKey?: string|null, deepseekKey?: string|null, modelstackKey?: string|null, openaiKey?: string|null, openrouterKey?: string|null },
  *     review: { model: string, fallbackModels?: string[] },
  *     reply: { model: string, fallbackModels?: string[] },
  *     pricing: Record<string, { inputPerMTok: number, outputPerMTok: number, cacheReadPerMTok?: number }>,
+ *     openrouter?: import('../openrouter-config.js').OpenRouterConfig,
  *   },
  *   kind: 'review' | 'reply',
  * }} opts
@@ -61,7 +63,7 @@ function makeLLMProvider(name, { config, kind }) {
       `config.${kind}.model must be a non-empty string (got: ${JSON.stringify(defaultModel)})`,
     );
   }
-  const KEY_FIELD = { anthropic: 'anthropicKey', gemini: 'geminiKey', deepseek: 'deepseekKey', modelstack: 'modelstackKey', openai: 'openaiKey' };
+  const KEY_FIELD = { anthropic: 'anthropicKey', gemini: 'geminiKey', deepseek: 'deepseekKey', modelstack: 'modelstackKey', openai: 'openaiKey', openrouter: 'openrouterKey' };
   const apiKey = config.auth?.[KEY_FIELD[name]];
   // openai allows empty string key for local models (Ollama, LM Studio)
   if (name === 'openai') {
@@ -106,6 +108,8 @@ function makeLLMProvider(name, { config, kind }) {
     provider = new DeepSeekProvider(ctorOpts);
   } else if (name === 'modelstack') {
     provider = new ModelStackProvider(ctorOpts);
+  } else if (name === 'openrouter') {
+    provider = new OpenRouterProvider({ ...ctorOpts, routing: config.openrouter });
   } else if (name === 'openai') {
     const normalizeUrl = (base) => {
       if (typeof base !== 'string') throw new ConfigError('openai: apiBaseUrl must be a string');

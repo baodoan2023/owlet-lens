@@ -118,7 +118,7 @@ Cache key shape: `ai-review-state-v1-<repoId>-pr-<prNum>-<runId>`. Restore uses 
 | `strict` | no | `false` | Exit non-zero (code 8) on blocking-severity findings |
 | `review-model` | no | (from config) | Override review model |
 | `reply-model` | no | (from config) | Override reply model; also sets the review-path reflection model |
-| `review-provider` | no | (from config) | Override review LLM provider (`anthropic` \| `gemini` \| `deepseek` \| `modelstack`); sets `AI_REVIEW_LLM_PROVIDER` |
+| `review-provider` | no | (from config) | Override review LLM provider (`anthropic` \| `gemini` \| `deepseek` \| `modelstack` \| `openai` \| `openrouter`); sets `AI_REVIEW_LLM_PROVIDER` |
 | `reply-provider` | no | (from config) | Override reply LLM provider; sets `AI_REPLY_LLM_PROVIDER` |
 
 ## Outputs

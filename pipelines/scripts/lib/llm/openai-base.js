@@ -2,7 +2,8 @@
 'use strict';
 
 const { BaseLLMProvider, DEFAULT_MAX_TOKENS, getFetchTimeoutMs, getFetchDispatcher } = require('./base.js');
-const { ProviderError, LLMError } = require('../errors.js');
+const { ProviderError, LLMError, RateLimitError } = require('../errors.js');
+const { redactSecrets } = require('../log-safe.js');
 const { withRetry } = require('../retry.js');
 const { calculateCost } = require('./pricing.js');
 const { parseSSE } = require('./sse-parse.js');
@@ -106,6 +107,30 @@ class OpenAICompatibleProvider extends BaseLLMProvider {
   }
 
   /**
+   * Map an in-stream `error` frame to a typed error. Gateways such as
+   * OpenRouter report failures that happen after the 200 headers were sent as
+   * a `data:` frame carrying `error: { code, message }` and
+   * `finish_reason: "error"`. Subclasses override this to add hints; the base
+   * keys only on `code`: 429 rate limit, 5xx retryable, anything else terminal.
+   * @param {{ code?: unknown, message?: unknown }} error
+   * @param {string} _model  the model id that was called, for subclass hints
+   * @returns {Error}
+   */
+  // eslint-disable-next-line no-unused-vars
+  _mapStreamError(error, _model) {
+    const code = Number(error?.code);
+    const detail = redactSecrets(String(error?.message ?? '')).slice(0, 200);
+    const msg = `${this.errorLabel} stream error ${Number.isFinite(code) ? code : 'unknown'}: ${detail}`;
+    if (code === 429) {
+      return new RateLimitError(msg, { provider: this.providerName, status: 429 });
+    }
+    if (code >= 500 && code < 600) {
+      return new ProviderError(msg, { provider: this.providerName, status: code, retryable: true });
+    }
+    return new LLMError(msg);
+  }
+
+  /**
    * @param {string} systemPrompt
    * @param {string} userPrompt
    * @param {{ model?: string, maxTokens?: number, tools?: any[], toolChoice?: any, responseFormat?: 'json' }} [opts]
@@ -134,7 +159,7 @@ class OpenAICompatibleProvider extends BaseLLMProvider {
         signal,
         dispatcher: getFetchDispatcher(timeoutMs),
       });
-      await this.mapHttpError(res);
+      await this.mapHttpError(res, { model });
       if (!res.body) {
         throw new ProviderError(`${this.errorLabel}: streaming response has no body`, {
           provider: this.providerName, retryable: true,
@@ -144,11 +169,17 @@ class OpenAICompatibleProvider extends BaseLLMProvider {
       let content = '';
       let usage;
       let sawContent = false;
+      /** @type {{ code?: unknown, message?: unknown } | undefined} */
+      let streamError;
       try {
         for await (const rawEvt of parseSSE(readableToBytes(res.body), this.errorLabel)) {
           // parseSSE yields `object` (payload shape is provider-defined); narrow
           // to the OpenAI-style SSE frame shape we expect instead of `as any`.
-          const evt = /** @type {{ choices?: Array<{ delta?: { content?: string } }>, usage?: any }} */ (rawEvt);
+          const evt = /** @type {{ choices?: Array<{ delta?: { content?: string } }>, usage?: any, error?: any }} */ (rawEvt);
+          // An error frame terminates the stream; any partial content before
+          // it is not a success. Mapped after the loop so the typed error is
+          // not reclassified as a transport break by the catch below.
+          if (evt?.error) { streamError = evt.error; break; }
           const delta = evt?.choices?.[0]?.delta?.content;
           if (typeof delta === 'string' && delta.length > 0) { content += delta; sawContent = true; }
           if (evt?.usage) usage = evt.usage;
@@ -164,6 +195,8 @@ class OpenAICompatibleProvider extends BaseLLMProvider {
         });
       }
 
+      if (streamError) throw this._mapStreamError(streamError, model);
+
       if (!sawContent && !usage) {
         // Produced nothing and no terminal usage frame — treat as a dropped
         // connection and retry the whole call.
@@ -177,8 +210,21 @@ class OpenAICompatibleProvider extends BaseLLMProvider {
 
     const text = this._extractText(aggregated);
     const usage = this._extractUsage(aggregated);
-    const cost = calculateCost(this.providerName, model, usage, this.pricingOverride);
+    const cost = this._cost(model, usage, aggregated.usage);
     return { text, usage, cost, model };
+  }
+
+  /**
+   * Price one call. Subclasses whose gateway reports the billed amount
+   * override this; the base prices tokens from the pricing tables.
+   * @param {string} model
+   * @param {{ inputTokens: number, outputTokens: number }} usage
+   * @param {any} _rawUsage  the provider's terminal usage frame, as sent
+   * @returns {import('./llm-provider.types.js').LLMCost}
+   */
+  // eslint-disable-next-line no-unused-vars
+  _cost(model, usage, _rawUsage) {
+    return calculateCost(this.providerName, model, usage, this.pricingOverride);
   }
 }
 

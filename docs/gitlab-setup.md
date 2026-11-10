@@ -17,7 +17,7 @@ works with both GitLab.com (SaaS) and self-hosted GitLab.
 
    | Variable | Required | Purpose |
    | --- | --- | --- |
-   | `ANTHROPIC_API_KEY` (or `DEEPSEEK_API_KEY` / `GEMINI_API_KEY` / `MODELSTACK_API_KEY`) | yes | Key for whichever LLM `review.provider` / `reply.provider` use. Mark **Masked**. |
+   | `ANTHROPIC_API_KEY` (or `DEEPSEEK_API_KEY` / `GEMINI_API_KEY` / `MODELSTACK_API_KEY` / `OPENROUTER_API_KEY`) | yes | Key for whichever LLM `review.provider` / `reply.provider` use. Mark **Masked**. |
    | `GITLAB_TOKEN` | yes | Project/group access token with the `api` scope. Required for the write paths: posting notes, resolving discussions, and creating the learn branch/commit/MR. Mark **Masked**. |
 
 4. Copy [`examples/ai-review.gitlab.yaml`](../examples/ai-review.gitlab.yaml) to

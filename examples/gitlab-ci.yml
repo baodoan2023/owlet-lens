@@ -14,7 +14,7 @@
 # Settings -> CI/CD -> Job token permissions (allowlist).
 #
 # Required CI/CD variables (Settings -> CI/CD -> Variables):
-#   ANTHROPIC_API_KEY (or DEEPSEEK_API_KEY / GEMINI_API_KEY / MODELSTACK_API_KEY)
+#   ANTHROPIC_API_KEY (or DEEPSEEK_API_KEY / GEMINI_API_KEY / MODELSTACK_API_KEY / OPENROUTER_API_KEY)
 #     - the key for whichever LLM `review.provider` / `reply.provider` use.
 #   GITLAB_TOKEN (required)
 #     - project/group access token with `api` scope. The auto-provided

@@ -91,7 +91,7 @@ test('makeLLMProvider: unknown name throws ConfigError', () => {
 });
 
 test('KNOWN_LLM_PROVIDERS list', () => {
-  assert.deepEqual([...KNOWN_LLM_PROVIDERS].sort(), ['anthropic', 'deepseek', 'gemini', 'modelstack', 'openai']);
+  assert.deepEqual([...KNOWN_LLM_PROVIDERS].sort(), ['anthropic', 'deepseek', 'gemini', 'modelstack', 'openai', 'openrouter']);
 });
 
 test('detectLLMProvider: accepts modelstack from config', () => {
@@ -296,4 +296,36 @@ test('makeLLMProvider: openai strips trailing slashes from apiBaseUrl', () => {
     kind: 'review',
   });
   assert.equal(p.apiUrl, 'https://openrouter.ai/api/v1/chat/completions');
+});
+
+test('makeLLMProvider: openrouter returns an adapter carrying the routing config', () => {
+  const routing = { dataCollection: 'deny', zdr: false, models: { 'a/b': { only: ['x'] } } };
+  const p = makeLLMProvider('openrouter', {
+    config: {
+      auth: { openrouterKey: 'or-k' },
+      review: { model: 'a/b' },
+      reply: { model: 'a/b' },
+      pricing: {},
+      openrouter: routing,
+    },
+    kind: 'review',
+  });
+  assert.equal(typeof p.call, 'function');
+  assert.equal(p.providerName, 'openrouter');
+  assert.deepEqual(p.routing, routing);
+});
+
+test('makeLLMProvider: openrouter missing key throws ConfigError', () => {
+  assert.throws(
+    () => makeLLMProvider('openrouter', {
+      config: { auth: { openrouterKey: null }, review: { model: 'a/b' }, reply: { model: 'a/b' }, pricing: {} },
+      kind: 'review',
+    }),
+    (e) => e instanceof ConfigError && /openrouterKey/.test(e.message),
+  );
+});
+
+test('detectLLMProvider: accepts openrouter from env', () => {
+  const p = detectLLMProvider({ env: { AI_REPLY_LLM_PROVIDER: 'openrouter' }, configValue: undefined, kind: 'reply' });
+  assert.equal(p, 'openrouter');
 });

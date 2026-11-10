@@ -50,6 +50,7 @@ jobs:
           config-path: .github/ai-review.dogfood.config.yaml
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           modelstack-api-key: ${{ secrets.MODELSTACK_API_KEY }}
+          openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           resolve-token: ${{ secrets.AI_REVIEW_RESOLVE_TOKEN }}
           subcommand: review
           review-model: ${{ vars.AI_REVIEW_MODEL }}
@@ -101,6 +102,7 @@ jobs:
           config-path: .github/ai-review.dogfood.config.yaml
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           modelstack-api-key: ${{ secrets.MODELSTACK_API_KEY }}
+          openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           resolve-token: ${{ secrets.AI_REVIEW_RESOLVE_TOKEN }}
           subcommand: reply
           reply-model: ${{ vars.AI_REPLY_MODEL }}
@@ -156,6 +158,7 @@ jobs:
           config-path: .github/ai-review.dogfood.config.yaml
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           modelstack-api-key: ${{ secrets.MODELSTACK_API_KEY }}
+          openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           resolve-token: ${{ secrets.AI_REVIEW_RESOLVE_TOKEN }}
           subcommand: review
           review-model: ${{ vars.AI_REVIEW_MODEL }}
@@ -193,6 +196,7 @@ jobs:
           config-path: .github/ai-review.dogfood.config.yaml
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           modelstack-api-key: ${{ secrets.MODELSTACK_API_KEY }}
+          openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
           github-token: ${{ secrets.AI_REVIEW_RESOLVE_TOKEN || github.token }}
           resolve-token: ${{ secrets.AI_REVIEW_RESOLVE_TOKEN }}
           subcommand: learn

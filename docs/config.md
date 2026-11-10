@@ -4,13 +4,13 @@ Per-key reference for `ai-review.config.yaml`. The reasons behind the design are
 
 ## LLM providers
 
-Five providers: `anthropic` (default), `gemini`, `deepseek`, `modelstack`, and `openai`. `openai` is any OpenAI-compatible endpoint set with `review.apiBaseUrl`; it allows an empty `auth.openaiKey` for local models such as Ollama or LM Studio. Review and reply paths each pick a provider independently.
+Six providers: `anthropic` (default), `gemini`, `deepseek`, `modelstack`, `openai`, and `openrouter`. `openai` is any OpenAI-compatible endpoint set with `review.apiBaseUrl`; it allows an empty `auth.openaiKey` for local models such as Ollama or LM Studio. Review and reply paths each pick a provider independently.
 
 YAML:
 
 ```yaml
 review:
-  provider: anthropic        # anthropic | gemini | deepseek | modelstack | openai
+  provider: anthropic        # anthropic | gemini | deepseek | modelstack | openai | openrouter
   model: claude-opus-4-7
   codingStandardsPath: ./examples/coding-standards-nestjs-react.md  # optional, see below
   severityThreshold: medium          # low|medium|high|critical, default medium — see Noise reduction
@@ -38,6 +38,7 @@ auth:
   geminiKey:    ${GEMINI_API_KEY}
   deepseekKey:  ${DEEPSEEK_API_KEY}
   modelstackKey: ${MODELSTACK_API_KEY}
+  openrouterKey: ${OPENROUTER_API_KEY}
 
 pricing:
   # Optional override of built-in pricing tables. Key = model name (global).
@@ -48,11 +49,46 @@ pricing:
     cacheReadPerMTok: 0.5
 ```
 
-Env-only override: `AI_REVIEW_LLM_PROVIDER`, `AI_REPLY_LLM_PROVIDER`. The GitHub Action exposes them as the `review-provider` / `reply-provider` inputs; the reusable workflow falls back to the caller repo variables of the same names (`vars.AI_REVIEW_LLM_PROVIDER`, `vars.AI_REPLY_LLM_PROVIDER`) when the input is empty. Required env per active provider: `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` / `DEEPSEEK_API_KEY` / `MODELSTACK_API_KEY`.
+Env-only override: `AI_REVIEW_LLM_PROVIDER`, `AI_REPLY_LLM_PROVIDER`. The GitHub Action exposes them as the `review-provider` / `reply-provider` inputs; the reusable workflow falls back to the caller repo variables of the same names (`vars.AI_REVIEW_LLM_PROVIDER`, `vars.AI_REPLY_LLM_PROVIDER`) when the input is empty. Required env per active provider: `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` / `DEEPSEEK_API_KEY` / `MODELSTACK_API_KEY` / `OPENAI_API_KEY` / `OPENROUTER_API_KEY`. The GitHub Action takes the OpenRouter key as the `openrouter-api-key` input.
 
 Inactive providers' keys not validated — only the active providers' keys must resolve at startup.
 
 `modelstack` targets the ModelStack proxy (`https://api.modelstack.cc/v1/chat/completions`, OpenAI-compatible, `Bearer` auth). It fronts arbitrary upstream models, so the built-in pricing table is empty for it — supply rates under the `pricing:` block (keyed by the model name you route) for accurate cost. Unpriced models log a `level:warn` line and report `$0`.
+
+### OpenRouter
+
+`openrouter` targets OpenRouter (`https://openrouter.ai/api/v1/chat/completions`, OpenAI-compatible, `Bearer` auth). Model ids are OpenRouter slugs such as `z-ai/glm-5.3-flash`. It is meant for models the other providers can't reach. For Claude, use the native `anthropic` provider, which keeps prompt caching.
+
+Routing lives in a top-level `openrouter:` block shared by review and reply:
+
+```yaml
+openrouter:
+  dataCollection: deny        # allow | deny, default deny
+  zdr: false                  # zero-data-retention providers only, default false
+  models:                     # keyed by exact model id; applied to the model being called
+    z-ai/glm-5.3-flash:
+      only: [open-inference/fp4]   # pin providers
+      allowFallbacks: false        # never route outside `only` / `order`
+      reasoning: { enabled: true } # enabled, effort (low|medium|high), maxTokens
+      maxOutputTokens: 32000       # max_tokens cap for this model, default 64000
+    qwen/qwen3-coder:
+      order: [cerebras, groq]
+```
+
+- Per-model keys: `only`, `ignore`, `order`, `quantizations` (string arrays); `allowFallbacks`, `zdr` (booleans); `dataCollection` (`allow|deny`); `sort` (`price|throughput|latency`); `reasoning`; `maxOutputTokens`.
+- A per-model value beats the global one, and the global one beats the built-in default (`dataCollection: deny`).
+- Any other key is a config error (exit 2). The block's shape is checked on every run, even when `openrouter` is not active.
+- When `openrouter` is active, a `models` key that matches none of `review.model`, `reply.model` or their `fallbackModels` logs a warning. A typo would otherwise silently drop the pin.
+- JSON-mode calls also send `provider.require_parameters: true`, so only upstreams that honor `response_format` are used.
+- Each `fallbackModels` entry uses its own `models` entry. Failover stays client-side ([ADR-0005](./adr/0005-model-failover-single-attempt-per-model.md)).
+- Cost: a `pricing:` entry for the model wins. Otherwise the run reports OpenRouter's billed `usage.cost` as the total. Otherwise it reports unpriced.
+- These errors are terminal (exit 5), with no retry and no failover, and the message names `openrouter.models["<id>"]`:
+  - a 404 because no provider is eligible under the routing
+  - `context_length_exceeded`
+
+  A pinned provider that is down (429 / 5xx) stays retryable.
+
+Why routing defaults to `deny` and why these errors are terminal: [ADR-0020](./adr/0020-openrouter-privacy-default-routing.md).
 
 
 ### Where the configuration file may send data

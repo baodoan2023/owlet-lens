@@ -4,7 +4,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { OpenAICompatibleProvider } = require('../../lib/llm/openai-base.js');
-const { AuthError, ProviderError, LLMError } = require('../../lib/errors.js');
+const { AuthError, ProviderError, LLMError, RateLimitError } = require('../../lib/errors.js');
 
 const enc = new TextEncoder();
 
@@ -167,4 +167,73 @@ test('openai-base: malformed SSE line throws LLMError and does NOT retry', async
   const p = new TestProvider({ apiKey: 'k', defaultModel: 'm', pricingOverride: {}, maxAttempts: 3 });
   await assert.rejects(p.call('sys', 'usr'), LLMError);
   assert.equal(attempt, 1);
+});
+
+/**
+ * A gateway error frame: HTTP 200 already sent, so the error arrives in-stream.
+ * @param {number} code
+ * @param {string} message
+ * @returns {string}
+ */
+function errorFrame(code, message) {
+  return `data: ${JSON.stringify({
+    error: { code, message },
+    choices: [{ index: 0, delta: { content: '' }, finish_reason: 'error' }],
+  })}\n\n`;
+}
+
+test('openai-base: in-stream error frame with 5xx code throws retryable ProviderError', async (t) => {
+  const orig = globalThis.fetch;
+  t.after(() => { globalThis.fetch = orig; });
+  globalThis.fetch = async () => sseResponse([errorFrame(502, 'upstream died'), 'data: [DONE]\n\n']);
+  const p = new TestProvider({ apiKey: 'k', defaultModel: 'm', pricingOverride: {}, maxAttempts: 1 });
+  await assert.rejects(p.call('sys', 'usr'), (e) => {
+    assert.ok(e instanceof ProviderError);
+    assert.equal(e.retryable, true);
+    assert.equal(e.status, 502);
+    assert.match(e.message, /upstream died/);
+    return true;
+  });
+});
+
+test('openai-base: in-stream error frame with 429 code throws RateLimitError', async (t) => {
+  const orig = globalThis.fetch;
+  t.after(() => { globalThis.fetch = orig; });
+  globalThis.fetch = async () => sseResponse([errorFrame(429, 'Rate limit exceeded')]);
+  const p = new TestProvider({ apiKey: 'k', defaultModel: 'm', pricingOverride: {}, maxAttempts: 1 });
+  await assert.rejects(p.call('sys', 'usr'), RateLimitError);
+});
+
+test('openai-base: in-stream 4xx error frame is terminal LLMError, even after partial content', async (t) => {
+  const orig = globalThis.fetch;
+  t.after(() => { globalThis.fetch = orig; });
+  let attempt = 0;
+  globalThis.fetch = async () => {
+    attempt += 1;
+    return sseResponse([
+      `data: ${JSON.stringify({ choices: [{ delta: { content: '{"findi' } }] })}\n\n`,
+      errorFrame(400, 'context_length_exceeded'),
+    ]);
+  };
+  const p = new TestProvider({ apiKey: 'k', defaultModel: 'm', pricingOverride: {}, maxAttempts: 3 });
+  await assert.rejects(p.call('sys', 'usr'), (e) => {
+    assert.ok(e instanceof LLMError);
+    assert.match(e.message, /400/);
+    assert.match(e.message, /context_length_exceeded/);
+    return true;
+  });
+  assert.equal(attempt, 1);
+});
+
+test('openai-base: _mapStreamError hook receives the error and the model id', async (t) => {
+  const orig = globalThis.fetch;
+  t.after(() => { globalThis.fetch = orig; });
+  globalThis.fetch = async () => sseResponse([errorFrame(404, 'no endpoints')]);
+  class HookProvider extends TestProvider {
+    _mapStreamError(error, model) {
+      return new LLMError(`hooked ${error.code} ${model}`);
+    }
+  }
+  const p = new HookProvider({ apiKey: 'k', defaultModel: 'm', pricingOverride: {}, maxAttempts: 1 });
+  await assert.rejects(p.call('sys', 'usr', { model: 'x/y' }), /hooked 404 x\/y/);
 });
