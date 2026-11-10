@@ -2,6 +2,7 @@
 'use strict';
 
 const { ConfigError } = require('./errors.js');
+const { buildModelChain } = require('./llm/model-ref.js');
 
 /**
  * @typedef {{ enabled?: boolean, effort?: 'low' | 'medium' | 'high', maxTokens?: number }} OpenRouterReasoning
@@ -181,13 +182,15 @@ function validateOpenRouterConfig(raw) {
  * @param {(msg: string) => void} onWarn
  */
 function warnUnusedOpenRouterModels(merged, onWarn) {
-  const kinds = /** @type {const} */ (['review', 'reply']).filter((k) => merged[k].provider === 'openrouter');
-  if (kinds.length === 0) return;
+  // openrouter is in use when it serves any model in either chain: the kind's
+  // own provider, or a `openrouter:<model>` fallback entry (ADR-0021).
   const used = new Set();
-  for (const k of kinds) {
-    used.add(merged[k].model);
-    for (const m of merged[k].fallbackModels ?? []) used.add(m);
+  for (const k of /** @type {const} */ (['review', 'reply'])) {
+    for (const ref of buildModelChain(merged[k].provider, merged[k].model, merged[k].fallbackModels)) {
+      if (ref.providerName === 'openrouter') used.add(ref.model);
+    }
   }
+  if (used.size === 0) return;
   for (const id of Object.keys(merged.openrouter?.models ?? {})) {
     if (!used.has(id)) {
       onWarn(`openrouter.models[${JSON.stringify(id)}] matches no configured openrouter model; its routing is never applied`);

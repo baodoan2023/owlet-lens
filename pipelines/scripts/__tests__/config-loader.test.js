@@ -960,3 +960,76 @@ describe('codingStandards array normalization', () => {
     assert.equal(cfg.review._codingStandards[0].path, 'rules/ts.md');
   });
 });
+
+describe('config-loader — cross-provider fallbackModels (ADR-0021)', () => {
+  it('a provider-prefixed fallback requires that provider\'s key', () => {
+    fs.writeFileSync(path.join(tmp, 'ai-review.config.yaml'),
+      'review:\n  provider: deepseek\n  model: deepseek-v4-pro\n  fallbackModels: [anthropic:claude-sonnet-5-5]\nreply:\n  provider: deepseek\n');
+    assert.throws(
+      () => loadConfig({ cwd: tmp, env: { DEEPSEEK_API_KEY: 'dk' }, cliFlags: {} }),
+      (e) => e instanceof ConfigError && /ANTHROPIC_API_KEY/.test(e.message) && /review\.fallbackModels/.test(e.message),
+    );
+  });
+
+  it('loads when the fallback provider key is present', () => {
+    fs.writeFileSync(path.join(tmp, 'ai-review.config.yaml'),
+      'review:\n  provider: deepseek\n  model: deepseek-v4-pro\n  fallbackModels: [anthropic:claude-sonnet-5-5]\nreply:\n  provider: deepseek\n');
+    const cfg = loadConfig({ cwd: tmp, env: { DEEPSEEK_API_KEY: 'dk', ANTHROPIC_API_KEY: 'ak' }, cliFlags: {} });
+    assert.deepEqual(cfg.review.fallbackModels, ['anthropic:claude-sonnet-5-5']);
+    assert.equal(cfg.auth.anthropicKey, 'ak');
+  });
+
+  it('an unresolved ${VAR} in the fallback provider\'s auth field is fatal, not a warning', () => {
+    fs.writeFileSync(path.join(tmp, 'ai-review.config.yaml'),
+      'review:\n  provider: deepseek\n  fallbackModels: [anthropic:claude-sonnet-5-5]\nreply:\n  provider: deepseek\nauth:\n  anthropicKey: ${ANTHROPIC_API_KEY}\n');
+    assert.throws(
+      () => loadConfig({ cwd: tmp, env: { DEEPSEEK_API_KEY: 'dk' }, cliFlags: {} }),
+      /auth\.anthropicKey/,
+    );
+  });
+
+  it('an empty model after a provider prefix is a ConfigError', () => {
+    fs.writeFileSync(path.join(tmp, 'ai-review.config.yaml'),
+      'review:\n  provider: deepseek\n  fallbackModels: ["anthropic:"]\nreply:\n  provider: deepseek\n');
+    assert.throws(
+      () => loadConfig({ cwd: tmp, env: { DEEPSEEK_API_KEY: 'dk', ANTHROPIC_API_KEY: 'ak' }, cliFlags: {} }),
+      ConfigError,
+    );
+  });
+
+  it('an unknown prefix is treated as part of the model id', () => {
+    fs.writeFileSync(path.join(tmp, 'ai-review.config.yaml'),
+      'review:\n  provider: openrouter\n  model: x\n  fallbackModels: ["meta-llama/llama-3-8b:free"]\nreply:\n  provider: openrouter\n  model: x\n');
+    const cfg = loadConfig({ cwd: tmp, env: { OPENROUTER_API_KEY: 'ok' }, cliFlags: {} });
+    assert.deepEqual(cfg.review.fallbackModels, ['meta-llama/llama-3-8b:free']);
+  });
+});
+
+describe('config-loader — fallback key edge cases (ADR-0021)', () => {
+  it('an openai:<model> fallback needs a non-empty key (no apiBaseUrl, so api.openai.com)', () => {
+    fs.writeFileSync(path.join(tmp, 'ai-review.config.yaml'),
+      'review:\n  provider: deepseek\n  fallbackModels: [openai:gpt-4o]\nreply:\n  provider: deepseek\nauth:\n  openaiKey: ""\n');
+    assert.throws(
+      () => loadConfig({ cwd: tmp, env: { DEEPSEEK_API_KEY: 'dk' }, cliFlags: {} }),
+      (e) => e instanceof ConfigError && /OPENAI_API_KEY/.test(e.message),
+    );
+  });
+
+  it('the missing-key error names the own-provider escape hatch', () => {
+    fs.writeFileSync(path.join(tmp, 'ai-review.config.yaml'),
+      'review:\n  provider: modelstack\n  model: m\n  fallbackModels: [anthropic:claude-x]\nreply:\n  provider: modelstack\n  model: m\n');
+    assert.throws(
+      () => loadConfig({ cwd: tmp, env: { MODELSTACK_API_KEY: 'mk' }, cliFlags: {} }),
+      (e) => e instanceof ConfigError && /modelstack:anthropic:claude-x/.test(e.message),
+    );
+  });
+
+  it('the hint survives a spaced prefix ("anthropic :x")', () => {
+    fs.writeFileSync(path.join(tmp, 'ai-review.config.yaml'),
+      'review:\n  provider: modelstack\n  model: m\n  fallbackModels: ["anthropic :claude-x"]\nreply:\n  provider: modelstack\n  model: m\n');
+    assert.throws(
+      () => loadConfig({ cwd: tmp, env: { MODELSTACK_API_KEY: 'mk' }, cliFlags: {} }),
+      (e) => e instanceof ConfigError && /ANTHROPIC_API_KEY/.test(e.message),
+    );
+  });
+});

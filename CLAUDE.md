@@ -57,7 +57,7 @@ pipelines/scripts/
     pr-description.js # PR description -> prompt-safe context (strip, redact, cap)
     noise-filter.js, file-size-filter.js, finding-validator.js   # bypasses + finding filters
     log-safe.js       # secret redaction; errors.js: typed errors
-    llm/              # LLM adapters (anthropic, gemini, deepseek, modelstack, openrouter, openai-base) + pricing + model-fallback
+    llm/              # LLM adapters (anthropic, gemini, deepseek, modelstack, openrouter, openai-base) + pricing + model-ref/model-fallback (cross-provider chain, ADR-0021)
     providers/        # review providers (github, bitbucket, gitlab, azure-devops) behind IReviewProvider
     port/             # cross-cutting wrappers over providers: summary, dismissal, reply context/evaluator, learn, state, strict
     learn/            # runner.js (learn subcommand) + harvester -> clusterer -> threshold -> dedup -> standards-block

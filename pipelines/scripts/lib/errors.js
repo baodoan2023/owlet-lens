@@ -67,9 +67,15 @@ class RateLimitError extends ProviderError {
 }
 
 class LLMError extends AIReviewError {
-  constructor(message) {
+  /**
+   * @param {string} message
+   * @param {{ terminal?: boolean }} [opts]  terminal: no model failover either,
+   *   for a configuration problem another model must not paper over (ADR-0020)
+   */
+  constructor(message, { terminal = false } = {}) {
     super(message);
     this.name = 'LLMError';
+    this.terminal = terminal;
   }
 }
 

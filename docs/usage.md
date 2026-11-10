@@ -163,4 +163,4 @@ To enable the UI flag flip, supply a PAT with `repo` scope:
 | `UND_ERR_CONNECT_TIMEOUT` | no connection within the timeout | same as above |
 | `CERT_*`, `UNABLE_TO_VERIFY_LEAF_SIGNATURE`, `SELF_SIGNED_CERT_IN_CHAIN` | TLS inspection / custom CA | set `NODE_EXTRA_CA_CERTS` |
 
-Model failover cannot help here: every model shares one endpoint. Test from the runner with `curl -sv <api-url>`.
+Model failover helps only when `fallbackModels` names a model on another provider (`<provider>:<model>`, [ADR-0021](./adr/0021-fallback-on-any-failure-across-providers.md)); models on the same provider share one endpoint. Test from the runner with `curl -sv <api-url>`.

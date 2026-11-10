@@ -91,6 +91,18 @@ describe('warnUnusedOpenRouterModels', () => {
     assert.deepEqual(warnings, []);
   });
 
+  it('counts an openrouter:<model> fallback on another provider as in use (ADR-0021)', () => {
+    const warnings = [];
+    const merged = {
+      review: { provider: 'deepseek', model: 'deepseek-v4-pro', fallbackModels: ['openrouter:a/x'] },
+      reply: base.reply,
+      openrouter: { models: { 'a/x': {}, 'c/typo': {} } },
+    };
+    warnUnusedOpenRouterModels(merged, (m) => warnings.push(m));
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /c\/typo/);
+  });
+
   it('counts reply-path models when only reply uses openrouter', () => {
     const warnings = [];
     const merged = {

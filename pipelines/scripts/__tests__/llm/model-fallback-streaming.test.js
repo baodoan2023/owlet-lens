@@ -39,7 +39,10 @@ test('failover: streaming 5xx on model A advances to model B', async (t) => {
   // maxAttempts:1 so the inner provider does not self-retry — the decorator
   // owns the cross-model loop, exactly as index.js wires it.
   const inner = new ModelStackProvider({ apiKey: 'k', defaultModel: 'A', pricingOverride: {}, maxAttempts: 1 });
-  const wrapped = wrapModelFallback(inner, ['A', 'B'], () => {});
+  const wrapped = wrapModelFallback(
+    [{ providerName: 'modelstack', model: 'A', provider: inner }, { providerName: 'modelstack', model: 'B', provider: inner }],
+    () => {},
+  );
   const r = await wrapped.call('sys', 'usr');
   assert.deepEqual(seenModels, ['A', 'B']);
   assert.equal(r.text, 'ok');

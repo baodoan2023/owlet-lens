@@ -3,12 +3,14 @@
 
 // Review-path LLM call: one request with structured output when the provider
 // supports tools, JSON extraction from the response text, and one stricter
-// re-prompt when the response does not parse. Private to the review pass.
+// re-prompt when the response does not parse. With a model chain, any failed
+// attempt moves to the next model instead (ADR-0021). Private to the review pass.
 
 const { CONFIG } = require('./config.js');
 const { safeMsg, safeCause, redactSecrets } = require('./log-safe.js');
 const { LLMError, isLLMTransportError } = require('./errors.js');
 const { extractJson } = require('./json-extract.js');
+const { nextTargetIndex } = require('./llm/model-fallback.js');
 
 // Anthropic tool-use spec for the review path. Forces a JSON-schema-conformant
 // `submit_findings` invocation so the response never needs free-text JSON
@@ -136,9 +138,38 @@ function isFindingsEnvelope(obj) {
 }
 
 /**
- * Call once; if the response has no parseable findings object, re-prompt
- * once with a stricter instruction. Returns every call's usage so the caller
- * can account for both attempts.
+ * Why an answered call failed to yield findings, for the failover log.
+ * @param {string} text
+ * @returns {'empty' | 'no-findings-json'}
+ */
+function badOutputReason(text) {
+  return text.trim() === '' ? 'empty' : 'no-findings-json';
+}
+
+/**
+ * The model chain to walk: the wrapper's targets when fallbacks are set,
+ * otherwise the single configured provider.
+ *
+ * @param {CallCtx} ctx
+ * @returns {ReadonlyArray<{ providerName: string, model: string, provider: any }>}
+ */
+function chainOf(ctx) {
+  const chain = ctx.llm?.chain;
+  if (Array.isArray(chain) && chain.length > 0) return chain;
+  return [{ providerName: ctx.providerName, model: ctx.model, provider: ctx.llm }];
+}
+
+/**
+ * Get a findings object from the LLM. Returns every call's usage so the
+ * caller can account for all attempts.
+ *
+ * One model: call once; if the response has no parseable findings object,
+ * re-prompt the same model once with a stricter instruction. Errors throw.
+ *
+ * A model chain (`fallbackModels`, ADR-0021): any failed attempt — an error,
+ * an empty answer, or no findings JSON — moves to the next model, and every
+ * attempt after the first uses the stricter prompt. Each model is tried once.
+ * When the last model fails, its error is thrown, or `parsed: null` returned.
  *
  * @param {string} systemPrompt
  * @param {string} userPrompt
@@ -146,28 +177,91 @@ function isFindingsEnvelope(obj) {
  * @returns {Promise<{ parsed: { findings: any[] } | null, calls: Array<{ usage: any, cost: any, model: string }> }>}
  */
 async function callForFindings(systemPrompt, userPrompt, ctx) {
+  const chain = chainOf(ctx);
+  return chain.length > 1
+    ? callChain(systemPrompt, userPrompt, ctx, chain)
+    : callSingle(systemPrompt, userPrompt, { ...ctx, llm: chain[0].provider });
+}
+
+/**
+ * @param {string} systemPrompt
+ * @param {string} userPrompt
+ * @param {CallCtx} ctx
+ */
+async function callSingle(systemPrompt, userPrompt, ctx) {
   const first = await callOnce(systemPrompt, userPrompt, ctx, 1);
   const calls = [first];
   let parsed = extractJson(first.text, isFindingsEnvelope);
   if (parsed) return { parsed, calls };
 
-  const snip = snippet(first.text);
-  ctx.log('warn', 'llm.extract.failed', {
-    provider: ctx.providerName, model: ctx.model, attempt: 1,
-    textLen: first.text.length, head: snip.head, tail: snip.tail,
-  });
+  logExtractFailed(ctx, 'llm.extract.failed', 1, first.text);
   ctx.log('info', 'llm.retry.stricter', { provider: ctx.providerName, model: ctx.model });
   const second = await callOnce(systemPrompt + STRICTER_SUFFIX, userPrompt, ctx, 2);
   calls.push(second);
   parsed = extractJson(second.text, isFindingsEnvelope);
-  if (!parsed) {
-    const snip2 = snippet(second.text);
-    ctx.log('error', 'llm.extract.failed.final', {
-      provider: ctx.providerName, model: ctx.model, attempt: 2,
-      textLen: second.text.length, head: snip2.head, tail: snip2.tail,
-    });
-  }
+  if (!parsed) logExtractFailed(ctx, 'llm.extract.failed.final', 2, second.text);
   return { parsed, calls };
+}
+
+/**
+ * @param {string} systemPrompt
+ * @param {string} userPrompt
+ * @param {CallCtx} ctx
+ * @param {ReadonlyArray<{ providerName: string, model: string, provider: any }>} chain
+ */
+async function callChain(systemPrompt, userPrompt, ctx, chain) {
+  /** @type {Array<{ usage: any, cost: any, model: string }>} */
+  const calls = [];
+  let i = 0;
+  for (let attempt = 1; ; attempt++) {
+    const target = chain[i];
+    const targetCtx = { ...ctx, llm: target.provider, model: target.model, providerName: target.providerName };
+    const sys = attempt === 1 ? systemPrompt : systemPrompt + STRICTER_SUFFIX;
+    /** @type {unknown} */
+    let err = null;
+    let result = null;
+    // Only the LLM call itself may fail over. A throw from our own parsing or
+    // logging below is a bug in this code and must surface, not try the next model.
+    try {
+      result = await callOnce(sys, userPrompt, targetCtx, attempt);
+    } catch (e) {
+      err = e;
+    }
+    let reason = 'error';
+    if (result) {
+      calls.push(result);
+      const parsed = extractJson(result.text, isFindingsEnvelope);
+      if (parsed) return { parsed, calls };
+      reason = badOutputReason(result.text);
+      logExtractFailed(targetCtx, 'llm.extract.failed', attempt, result.text);
+    }
+    const next = nextTargetIndex(chain, i, err);
+    if (next === -1) {
+      if (err) throw err;
+      ctx.log('error', 'llm.extract.failed.final', { provider: target.providerName, model: target.model, attempt });
+      return { parsed: null, calls };
+    }
+    ctx.log('warn', 'llm.model.failover', {
+      attempt, reason,
+      fromProvider: target.providerName, fromModel: target.model,
+      toProvider: chain[next].providerName, toModel: chain[next].model,
+    });
+    i = next;
+  }
+}
+
+/**
+ * @param {CallCtx} ctx
+ * @param {string} msg
+ * @param {number} attempt
+ * @param {string} text
+ */
+function logExtractFailed(ctx, msg, attempt, text) {
+  const snip = snippet(text);
+  ctx.log(msg.endsWith('.final') ? 'error' : 'warn', msg, {
+    provider: ctx.providerName, model: ctx.model, attempt,
+    textLen: text.length, head: snip.head, tail: snip.tail,
+  });
 }
 
 module.exports = { callForFindings, SUBMIT_FINDINGS_TOOL };

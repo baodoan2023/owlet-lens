@@ -128,7 +128,9 @@ class OpenRouterProvider extends OpenAICompatibleProvider {
   }
 
   /**
-   * 400/404 are terminal either way; add a routing hint when the cause is one.
+   * 400/404 are never retried on the same model. A routing cause adds a hint
+   * and marks the error terminal, so no fallback model papers over the pin
+   * (ADR-0020); any other 400/404 may fail over (ADR-0021).
    * @param {Response} res
    * @param {{ model?: string }} [ctx]
    */
@@ -136,7 +138,7 @@ class OpenRouterProvider extends OpenAICompatibleProvider {
     if (res.status === 400 || res.status === 404) {
       const txt = await res.text().catch(() => '');
       const hint = routingHint(ctx.model ?? this.defaultModel, res.status, txt);
-      throw new LLMError(`${this.errorLabel} ${res.status}: ${redactSecrets(txt).slice(0, 200)}${hint}`);
+      throw new LLMError(`${this.errorLabel} ${res.status}: ${redactSecrets(txt).slice(0, 200)}${hint}`, { terminal: hint !== '' });
     }
     return super.mapHttpError(res, ctx);
   }
@@ -150,7 +152,7 @@ class OpenRouterProvider extends OpenAICompatibleProvider {
     if (!(mapped instanceof LLMError)) return mapped;
     const text = `${String(error?.message ?? '')} ${String(error?.metadata?.error_type ?? '')}`;
     const hint = routingHint(model, Number(error?.code), text);
-    return hint ? new LLMError(`${mapped.message}${hint}`) : mapped;
+    return hint ? new LLMError(`${mapped.message}${hint}`, { terminal: true }) : mapped;
   }
 
   /**

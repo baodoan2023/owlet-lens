@@ -196,6 +196,7 @@ test('openrouter: HTTP 404 is terminal and points at the routing entry', async (
     assert.ok(e instanceof LLMError);
     assert.match(e.message, /No endpoints found/);
     assert.match(e.message, /openrouter\.models\["z-ai\/glm-5\.3-flash"\]/);
+    assert.equal(e.terminal, true, 'routing failure must not fail over (ADR-0020)');
     return true;
   });
   assert.equal(calls, 1);
@@ -209,6 +210,7 @@ test('openrouter: HTTP 400 context_length_exceeded names maxOutputTokens', async
   await assert.rejects(make().call('sys', 'usr'), (e) => {
     assert.ok(e instanceof LLMError);
     assert.match(e.message, /maxOutputTokens/);
+    assert.equal(e.terminal, true);
     return true;
   });
 });
@@ -219,6 +221,7 @@ test('openrouter: HTTP 400 without a known cause is a plain LLMError', async (t)
     assert.ok(e instanceof LLMError);
     assert.match(e.message, /bad param/);
     assert.doesNotMatch(e.message, /openrouter\.models/);
+    assert.equal(e.terminal, false, 'a plain 400 may fail over (ADR-0021)');
     return true;
   });
 });
@@ -231,6 +234,7 @@ test('openrouter: in-stream no-endpoint error is terminal with the routing hint'
   await assert.rejects(make().call('sys', 'usr'), (e) => {
     assert.ok(e instanceof LLMError);
     assert.match(e.message, /openrouter\.models\["z-ai\/glm-5\.3-flash"\]/);
+    assert.equal(e.terminal, true);
     return true;
   });
 });

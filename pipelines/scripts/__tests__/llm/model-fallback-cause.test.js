@@ -12,7 +12,10 @@ test('failover log carries the network root cause code', async () => {
     },
   };
   const logs = [];
-  const llm = wrapModelFallback(provider, ['a', 'b'], (l) => logs.push(l));
+  const llm = wrapModelFallback(
+    [{ providerName: 'p', model: 'a', provider }, { providerName: 'p', model: 'b', provider }],
+    (l) => logs.push(l),
+  );
   await llm.call('s', 'u');
   assert.equal(logs.length, 1);
   assert.equal(logs[0].errCode, 'ENOTFOUND');

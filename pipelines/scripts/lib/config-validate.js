@@ -6,6 +6,25 @@ const { ConfigError } = require('./errors.js');
 const { deepMerge } = require('./config-merge.js');
 const { assertHostAllowed, BUILTIN_LLM_HOSTS } = require('./endpoint-guard.js');
 const { validateOpenRouterConfig, warnUnusedOpenRouterModels } = require('./openrouter-config.js');
+const { parseModelRef } = require('./llm/model-ref.js');
+
+/**
+ * Providers other than the kind's own named by `<provider>:<model>` entries in
+ * `fallbackModels` (ADR-0021). Non-string entries are skipped here and
+ * rejected by the per-entry check further down.
+ *
+ * @param {any} kindCfg  merged.review or merged.reply
+ * @returns {Set<string>}
+ */
+function fallbackProviders(kindCfg) {
+  const out = new Set();
+  for (const m of Array.isArray(kindCfg.fallbackModels) ? kindCfg.fallbackModels : []) {
+    if (typeof m !== 'string') continue;
+    const { providerName } = parseModelRef(m, kindCfg.provider);
+    if (providerName !== kindCfg.provider) out.add(providerName);
+  }
+  return out;
+}
 
 /**
  * Validate and normalize a merged config, then resolve credentials from config or env.
@@ -72,6 +91,7 @@ function validateConfig({ merged, env, unresolvedByPath, onWarn }) {
   if (effectiveProvider === 'github') requiredAuthFields.add('auth.token');
   for (const kind of ['review', 'reply']) {
     requiredAuthFields.add(PROVIDER_AUTH_FIELD[merged[kind].provider]);
+    for (const p of fallbackProviders(merged[kind])) requiredAuthFields.add(PROVIDER_AUTH_FIELD[p]);
   }
   for (const [cfgPath, vars] of Object.entries(unresolvedByPath)) {
     const msg = `Unresolved env var(s) ${vars.join(', ')} in config field '${cfgPath}'`;
@@ -135,6 +155,22 @@ function validateConfig({ merged, env, unresolvedByPath, onWarn }) {
       throw new ConfigError(
         `${entry.envName} is required (${kind}.provider=${providerName}); set env or ${entry.authField} in config`,
       );
+    }
+    // A cross-provider fallback needs its own key too: fail at load, not at
+    // failover time halfway through a review (ADR-0021).
+    // No empty-key exemption for openai here: `apiBaseUrl` applies to the
+    // kind's own provider only, so an openai fallback on another kind provider
+    // targets api.openai.com, which rejects an empty key. (`openai:` under
+    // provider: openai is the kind's own provider and never reaches this loop.)
+    for (const p of fallbackProviders(merged[kind])) {
+      const fb = KEY_BY_PROVIDER[p];
+      if (typeof fb.key !== 'string' || fb.key.trim() === '') {
+        const entry = String(merged[kind].fallbackModels.find((m) => typeof m === 'string' && parseModelRef(m, merged[kind].provider).providerName === p)).trim();
+        throw new ConfigError(
+          `${fb.envName} is required (${kind}.fallbackModels entry ${JSON.stringify(entry)} names provider ${p}); set env or ${fb.authField} in config. `
+          + `If this id belongs to ${kind}.provider (a gateway id), write it as ${JSON.stringify(`${merged[kind].provider}:${entry}`)}`,
+        );
+      }
     }
   }
 

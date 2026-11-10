@@ -27,6 +27,7 @@ review:
   fallbackModels:              # optional model failover, see below
     - deepseek-v3.2
     - claude-sonnet-4-6
+    - gemini:gemini-3.1-pro    # <provider>:<model> runs on another provider (needs its key)
 reply:
   provider: anthropic
   model: claude-haiku-4-5-20251001
@@ -80,7 +81,7 @@ openrouter:
 - Any other key is a config error (exit 2). The block's shape is checked on every run, even when `openrouter` is not active.
 - When `openrouter` is active, a `models` key that matches none of `review.model`, `reply.model` or their `fallbackModels` logs a warning. A typo would otherwise silently drop the pin.
 - JSON-mode calls also send `provider.require_parameters: true`, so only upstreams that honor `response_format` are used.
-- Each `fallbackModels` entry uses its own `models` entry. Failover stays client-side ([ADR-0005](./adr/0005-model-failover-single-attempt-per-model.md)).
+- Each `fallbackModels` entry uses its own `models` entry, including an `openrouter:<model>` fallback on another provider. Failover stays client-side ([ADR-0005](./adr/0005-model-failover-single-attempt-per-model.md)). A routing failure stops the chain instead of failing over ([ADR-0021](./adr/0021-fallback-on-any-failure-across-providers.md)).
 - Cost: a `pricing:` entry for the model wins. Otherwise the run reports OpenRouter's billed `usage.cost` as the total. Otherwise it reports unpriced.
 - These errors are terminal (exit 5), with no retry and no failover, and the message names `openrouter.models["<id>"]`:
   - a 404 because no provider is eligible under the routing
@@ -110,7 +111,25 @@ Not covered: `gitlab.baseUrl` and `azure.orgUrl` can still be set by the file. T
 
 ### Model failover
 
-`review.fallbackModels` / `reply.fallbackModels` (string arrays, default `[]`) list alternate model ids to try in order when the primary model returns a **retryable** error: 5xx / 429 / 529, or a Cloudflare challenge on a 403 (`isCloudflareChallenge` in `base.js`). Wiring: `makeLLMProvider` (`lib/llm/index.js`) plus `wrapModelFallback` (`lib/llm/model-fallback.js`). Each failover logs a `level: warn` `llm model failover` line. Cost is attributed to the model that answered (`usage.models`), so every fallback model needs a `pricing:` entry. Why each model gets only one attempt: [ADR-0005](./adr/0005-model-failover-single-attempt-per-model.md).
+`review.fallbackModels` / `reply.fallbackModels` (string arrays, default `[]`) list alternate models to try in order after the primary model. Each model gets one attempt ([ADR-0005](./adr/0005-model-failover-single-attempt-per-model.md)).
+
+```yaml
+review:
+  provider: deepseek
+  model: deepseek-v4-pro
+  fallbackModels:
+    - deepseek-flash                 # bare id: same provider (deepseek)
+    - anthropic:claude-sonnet-5-5    # <provider>:<model>: runs on anthropic with ANTHROPIC_API_KEY
+```
+
+- **What moves to the next model** ([ADR-0021](./adr/0021-fallback-on-any-failure-across-providers.md)): in the review path, any failed attempt. That means an error, an empty answer, or no JSON object with a `findings` array. Every attempt after the first uses the stricter JSON-only prompt. In the reply, reflection and learn paths, any error moves on.
+- **What does not**: an auth error skips the rest of that provider's models and moves to the next provider. An OpenRouter routing failure ([ADR-0020](./adr/0020-openrouter-privacy-default-routing.md)) stops the chain.
+- **No fallback configured**: unchanged. Bad output gets one stricter re-prompt on the same model, and errors throw.
+- **Provider prefix**: applies to `fallbackModels` entries only. The primary `model` is always a plain id on `provider`. Allowed prefixes are `anthropic`, `gemini`, `deepseek`, `modelstack`, `openai` and `openrouter`, placed before the first colon. Any other prefix is part of the model id, so `meta-llama/llama-3-8b:free` stays a bare id. A gateway id that itself starts with a provider name (for example a ModelStack id `anthropic:claude-x`) now routes to that provider. To keep it on the kind's own provider, prefix it with that provider: `modelstack:anthropic:claude-x`. Each prefixed provider needs its key (env or `auth.*`), or the config fails with exit 2. With the GitHub Action, pass the matching `*-api-key` input. `apiBaseUrl` applies to the kind's own provider only. So when `provider` is not `openai`, an `openai:` fallback targets api.openai.com and needs a non-empty key. A prefix that names the kind's own provider is the same as a bare id: same adapter, same `apiBaseUrl`, same key rules.
+- **Logs**: the review path logs `llm.model.failover` (`reason`: `error` | `empty` | `no-findings-json`). The other paths log `llm model failover`. Both name the provider and model on each side.
+- **Cost**: attributed to the model that answered (`usage.models`), so every fallback model needs a `pricing:` entry unless the built-in table has it.
+
+Wiring: `buildModelChain` (`lib/llm/model-ref.js`), `makeLLMProvider` (`lib/llm/index.js`), `wrapModelFallback` (`lib/llm/model-fallback.js`) and `callForFindings` (`lib/review-llm.js`).
 
 ### Large-file bypass
 
