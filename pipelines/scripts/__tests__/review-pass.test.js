@@ -83,6 +83,26 @@ async function pass({ diffs, threads = [], llm, cfg = config(), promptContext = 
   );
 }
 
+describe('runReviewPass: PR description', () => {
+  const diffs = [{ path: 'src/a.js', patch: ADD2 }];
+  const meta = { id: '42', title: 'T', description: 'All 1633 tests pass.' };
+
+  it('sends the description by default', async () => {
+    const llm = fakeLlm([[]]);
+    await runReviewPass({ diffs, threads: [], meta, promptContext: {}, config: config() }, { llm, llmName: 'fake', log: silent });
+    assert.ok(llm.calls[0].user.includes('<pr_description>\nAll 1633 tests pass.\n</pr_description>'));
+  });
+
+  it('omits the description when review.includePrDescription is false', async () => {
+    const llm = fakeLlm([[]]);
+    const logs = [];
+    const cfg = config({ review: { includePrDescription: false } });
+    await runReviewPass({ diffs, threads: [], meta, promptContext: {}, config: cfg }, { llm, llmName: 'fake', log: (l, m, d) => logs.push([m, d]) });
+    assert.doesNotMatch(llm.calls[0].user, /1633 tests/);
+    assert.ok(logs.some(([m, d]) => m === 'pr.description.omitted' && d.chars === meta.description.length));
+  });
+});
+
 describe('runReviewPass: findings to action plan', () => {
   it('posts a valid finding with ruleId = category and keeps suggestion', async () => {
     const llm = fakeLlm([[finding('src/a.js', 1, { suggestion: ' fixed(); ' })]]);

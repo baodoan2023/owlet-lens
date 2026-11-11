@@ -77,7 +77,9 @@ async function runReviewPass(input, deps) {
 
   const dismissed = buildDismissedContext(threads, config.markerPrefix ?? 'ai-review');
   const files = prepareFiles(diffs, config, log);
-  const description = preparePrDescription(meta.description);
+  const includeDescription = config.review.includePrDescription !== false;
+  const description = preparePrDescription(includeDescription ? meta.description : '');
+  if (!includeDescription && meta.description) log('info', 'pr.description.omitted', { chars: meta.description.length });
   if (description.redacted > 0) log('warn', 'pr.description.secrets.redacted', { count: description.redacted });
   if (description.truncated) log('info', 'pr.description.truncated', { originalChars: meta.description?.length ?? 0 });
   const promptOpts = {

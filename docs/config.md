@@ -19,6 +19,7 @@ review:
   noiseCategories: [style, naming]   # LOW severity in these categories dropped everywhere, default shown
   skipGeneratedFiles: true           # bypass migrations/fixtures/mocks/snapshots/dist/build/vendor/generated pre-LLM, default true
   skipUnchanged: true                # skip a push whose review fingerprint matches the last full review, default true — see Skip unchanged pushes
+  includePrDescription: true         # send the PR description to the model as untrusted context, default true
   reflection: true                   # second-pass LLM validation of findings, default true — see Reflection filter
   detectBreakingChanges: false       # when true, flags removed/renamed public APIs as HIGH/CRITICAL, default false
   contextPaths:                # optional, see below
@@ -150,6 +151,8 @@ Because each overflow chunk and each failover model sees the same budget, a valu
 `review.testFileSeverityThreshold` (default `high`) drops findings on test files (matched by the `isTestFile` convention in `lib/finding-validator.js`) ranked below the threshold — default drops LOW and MEDIUM, keeps HIGH/CRITICAL. `review.noiseCategories` (default `[style, naming]`) drops LOW-severity findings in listed categories on any file. Both gates are enforced in `lib/noise-filter.js`'s `shouldDropAsNoise`, called by the review pass right after `validateFindings` — the prompt (`prompt-builder.js`) is updated to match the defaults as a token-saving hint, but `shouldDropAsNoise` is authoritative.
 
 `review.skipGeneratedFiles` (default `true`) bypasses boilerplate-path diffs (`lib/noise-filter.js`'s `isBoilerplateFile` — migrations/fixtures/mocks/snapshots/dist/build/vendor/generated dirs, plus `*.lock`/`*.min.*`/`*.generated.*`) before `buildPrompt`, in the review pass alongside the existing `maxFileBytes` bypass — both merge into the same `prompt.files.skipped` warn log.
+
+`review.includePrDescription` (boolean, default `true`) sends the PR description (secret-redacted, capped at 2000 characters) to the model inside a `<pr_description>` block, marked as untrusted. Set it to `false` to review the diff alone; the run then logs `pr.description.omitted`.
 
 ### Skip unchanged pushes
 

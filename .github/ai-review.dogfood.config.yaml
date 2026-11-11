@@ -27,6 +27,7 @@ review:
   maxFindings: 25
   maxFileBytes: 100000   # bypass any file whose diff exceeds 100000 bytes (~98 KB) before sending to the LLM (null = no cap)
   severityThreshold: medium
+  includePrDescription: false   # experiment: PR #11 got 0 findings; checking whether the description biases the model
   codingStandardsPath: ./examples/coding-standards-nestjs-react.md
   contextPaths:
     - ./CLAUDE.md

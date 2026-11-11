@@ -29,6 +29,8 @@ const DEFAULTS = Object.freeze({
     skipGeneratedFiles: true,
     // Skip a push whose review fingerprint matches the last full review (ADR-0015).
     skipUnchanged: true,
+    // Send the PR description to the model as untrusted context (prompt-builder.js).
+    includePrDescription: true,
     exportWebhookUrl: null,
     reflection: true,
     detectBreakingChanges: false,

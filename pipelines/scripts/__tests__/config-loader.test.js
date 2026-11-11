@@ -809,6 +809,23 @@ describe('config-loader', () => {
   });
 });
 
+describe('review.includePrDescription', () => {
+  it('defaults to true and accepts false', () => {
+    const cfg = loadConfig({ cwd: tmp, env: { ANTHROPIC_API_KEY: 'k' }, cliFlags: {} });
+    assert.equal(cfg.review.includePrDescription, true);
+    fs.writeFileSync(path.join(tmp, 'ai-review.config.yaml'), 'review:\n  includePrDescription: false\n');
+    assert.equal(loadConfig({ cwd: tmp, env: { ANTHROPIC_API_KEY: 'k' }, cliFlags: {} }).review.includePrDescription, false);
+  });
+
+  it('throws ConfigError on non-boolean value', () => {
+    fs.writeFileSync(path.join(tmp, 'ai-review.config.yaml'), 'review:\n  includePrDescription: "no"\n');
+    assert.throws(
+      () => loadConfig({ cwd: tmp, env: { ANTHROPIC_API_KEY: 'k' }, cliFlags: {} }),
+      /review\.includePrDescription must be a boolean/,
+    );
+  });
+});
+
 describe('review.detectBreakingChanges', () => {
   it('throws ConfigError on non-boolean value', () => {
     for (const bad of ['"true"', '1', '"yes"']) {

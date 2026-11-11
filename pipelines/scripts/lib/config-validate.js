@@ -236,6 +236,12 @@ function validateConfig({ merged, env, unresolvedByPath, onWarn }) {
     );
   }
 
+  if (typeof merged.review.includePrDescription !== 'boolean') {
+    throw new ConfigError(
+      `review.includePrDescription must be a boolean (got: ${JSON.stringify(merged.review.includePrDescription)})`,
+    );
+  }
+
   const validSummaryModes = new Set(['sticky', 'append']);
   const summaryMode = String(merged.review.summary?.mode ?? 'sticky').trim().toLowerCase();
   if (!validSummaryModes.has(summaryMode)) {
